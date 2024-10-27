@@ -1,0 +1,69 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: mydefaultorg
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: fastapi-crud-serverless
+
+frameworkVersion: '4'
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: ${opt:region, 'us-east-1'}
+  environment:
+    DYNAMODB_TABLE: ${self:custom.dynamodbTableName}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:*
+      Resource: 
+        - arn:aws:dynamodb:${self:provider.region}:*:table/${self:custom.dynamodbTableName}  # Dynamically setting the table ARN for full access
+  layers:
+    - dependencies:
+        path: layer
+      compatibleRuntimes:
+        - python3.8
+        - python3.9
+        - python3.10
+        - python3.11
+        - python3.12
+
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  dynamodbTableName: my-dynamodb-table-${opt:stage, 'dev'}
+  pythonRequirements:
+    layer: true
+    dockerizePip: non-linux
+
+resources:
+  Resources:
+    UserTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.dynamodbTableName}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: N
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+functions:
+  crudapp:
+    handler: main.handler
+    environment:
+      TABLE_NAME: ${self:custom.dynamodbTableName}
+    events:
+      - http:
+          path: /
+          method: ANY
+
+      - http:
+          path: /{proxy+}
+          method: ANY
+
+    layers:
+      - {Ref: PythonRequirementsLambdaLayer}
